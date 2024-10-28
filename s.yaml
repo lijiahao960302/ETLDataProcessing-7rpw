@@ -1,0 +1,89 @@
+# ------------------------------------
+#   欢迎您使用阿里云函数计算 FC 组件进行项目开发
+#   组件仓库地址：https://github.com/devsapp/fc
+#   组件帮助文档：https://www.serverless-devs.com/fc/readme
+#   Yaml参考文档：https://www.serverless-devs.com/fc/yaml/readme
+#   关于：
+#      - Serverless Devs和FC组件的关系、如何声明/部署多个函数、超过50M的代码包如何部署
+#      - 关于.fcignore使用方法、工具中.s目录是做什么、函数进行build操作之后如何处理build的产物
+#   等问题，可以参考文档：https://www.serverless-devs.com/fc/tips
+#   关于如何做CICD等问题，可以参考：https://www.serverless-devs.com/serverless-devs/cicd
+#   关于如何进行环境划分等问题，可以参考：https://www.serverless-devs.com/serverless-devs/extend
+#   更多函数计算案例，可参考：https://github.com/devsapp/awesome/
+#   有问题快来钉钉群问一下吧：33947367
+# ------------------------------------
+
+edition: 1.0.0
+name: ETLDataProcessing
+# access 是当前应用所需要的密钥信息配置：
+# 密钥配置可以参考：https://www.serverless-devs.com/serverless-devs/command/config
+# 密钥使用顺序可以参考：https://www.serverless-devs.com/serverless-devs/tool#密钥使用顺序与规范
+access: "undefined"
+
+vars:
+  region: "cn-beijing"
+  service:
+    name: "etl-data-processing-7rpw"
+    description: 'etl data processing'
+    role: "acs:ram::1717913435311915:role/aliyunfcdefaultrole"
+    internetAccess: true
+  flowName: "etl-data-processing-7rpw"
+
+services:
+  # 函数计算配置
+  shards-spliter:
+    component: devsapp/fc
+    actions:
+      pre-deploy:
+        - run: pip3 install -r requirements.txt -t ./site-packages
+          path: code/shards-spliter
+    props:
+      region: ${vars.region}
+      service: ${vars.service}
+      function:
+        name: shards-spliter
+        handler: index.handler
+        timeout: 600
+        memorySize: 512
+        runtime: python3.9
+        codeUri: code/shards-spliter
+  mapper:
+    component: devsapp/fc
+    actions:
+      pre-deploy:
+        - run: pip3 install -r requirements.txt -t ./site-packages
+          path: code/mapper
+    props:
+      region: ${vars.region}
+      service: ${vars.service}
+      function:
+        name: mapper
+        handler: index.handler
+        timeout: 600
+        memorySize: 512
+        runtime: python3.9
+        codeUri: code/mapper
+  reducer:
+    component: devsapp/fc
+    actions:
+      pre-deploy:
+        - run: pip3 install -r requirements.txt -t ./site-packages
+          path: code/reducer
+    props:
+      region: ${vars.region}
+      service: ${vars.service}
+      function:
+        name: reducer
+        handler: index.handler
+        timeout: 600
+        memorySize: 512
+        runtime: python3.9
+        codeUri: code/reducer
+  etl_data_processing_workflow:
+    component: fnf
+    props:
+      region: ${vars.region}
+      name: ${vars.flowName}
+      description: Serverless workflow transfer kafka message to oss solution
+      definition: code/workflows/etl-data-processing.yml
+      roleArn: "acs:ram::1717913435311915:role/fnf-execution-default-role"

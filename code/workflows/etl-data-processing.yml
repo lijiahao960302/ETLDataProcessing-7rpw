@@ -1,0 +1,107 @@
+SpecVersion: v1
+Name:  etl-data-processing-7rpw
+StartAt: fetcher
+States:
+  - Name: fetcher
+    Next: mapping
+    OnErrors:
+      - Errors:
+          - ErrorNeedsRetry
+        Retry:
+          FixedBackoff: 10
+          MaxAttempts: 3
+          Multiplier: 2
+      - Errors:
+          - FC.ResourceThrottled
+          - FC.ResourceExhausted
+          - FC.InternalServerError
+          - FnF.TaskTimeout
+          - FC.Unknown
+        Retry:
+          FixedBackoff: 3
+          MaxAttempts: 10
+          Multiplier: 2
+      - Errors:
+          - ErrorNeedsRetry
+        Next: retryFailed
+    Parameters:
+      resourceArn: acs:fc:::services/etl-data-processing-7rpw/functions/shards-spliter
+    TaskMode: RequestComplete
+    Action: FC:InvokeFunction
+    Type: Task
+  - ItemsPath: $Input.Body.shards
+    Name: mapping
+    Next: reducing
+    OutputConstructor:
+      shard_ids.$: $Input.Body.shard_ids
+    Processor:
+      StartAt: singleMappingJob
+      States:
+        - End: true
+          Name: singleMappingJob
+          OnErrors:
+            - Errors:
+                - ErrorNeedsRetry
+              Retry:
+                FixedBackoff: 10
+                MaxAttempts: 3
+                Multiplier: 2
+            - Errors:
+                - FC.ResourceThrottled
+                - FC.ResourceExhausted
+                - FC.InternalServerError
+                - FnF.TaskTimeout
+                - FC.Unknown
+              Retry:
+                FixedBackoff: 3
+                MaxAttempts: 10
+                Multiplier: 2
+          Parameters:
+            resourceArn: acs:fc:::services/etl-data-processing-7rpw/functions/mapper
+            body:
+              shard.$: $Input
+              bucketName: resourcecenter-ecs
+          TaskMode: RequestComplete
+          Action: FC:InvokeFunction
+          Type: Task
+      Type: MapProcessor
+    Type: Map
+  - End: true
+    Name: reducing
+    Next: retryFailed
+    OnErrors:
+      - Errors:
+          - ErrorNeedsRetry
+        Retry:
+          FixedBackoff: 10
+          MaxAttempts: 3
+          Multiplier: 2
+      - Errors:
+          - FC.ResourceThrottled
+          - FC.ResourceExhausted
+          - FC.InternalServerError
+          - FnF.TaskTimeout
+          - FC.Unknown
+        Retry:
+          FixedBackoff: 3
+          MaxAttempts: 10
+          Multiplier: 2
+      - Errors:
+          - ErrorNeedsRetry
+        Next: retryFailed
+    Parameters:
+      resourceArn: acs:fc:::services/etl-data-processing-7rpw/functions/reducer
+      body:
+        shard_ids.$: $Input.shard_ids
+        bucketName: resourcecenter-ecs
+    TaskMode: RequestComplete
+    Action: FC:InvokeFunction
+    OutputConstructor:
+      $: $Output.Body
+    Type: Task
+  - End: true
+    Type: Fail
+    Name: retryFailed
+    Code: BizError
+    Detail: BizError
+Type: StateMachine
